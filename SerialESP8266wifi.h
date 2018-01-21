@@ -146,6 +146,28 @@ public:
     bool isConnection(void);
     bool checkConnections(WifiConnection **pConnections);
     
+	/*
+	 * Additional methods for library method compatibility to ESP8266Wifi
+	 */
+	 
+	SerialESP8266wifi();
+
+    bool open(const char* ip, int& port);
+    void close();
+    bool isConnected();
+	
+	int available();
+	char read();	
+	
+	void println(char* data);
+	void println(String& data);
+	void println();
+	void print(char* data);
+	void print(String& data);
+	void print(char data);
+	
+	void stop();
+	
 private:
     Stream* _serialIn;
     Stream* _serialOut;
