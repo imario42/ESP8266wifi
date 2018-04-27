@@ -71,8 +71,10 @@ SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte r
     _serialOut = &serialOut;
     _resetPin = resetPin;
 
-    pinMode(_resetPin, OUTPUT);
-    digitalWrite(_resetPin, LOW);//Start with radio off
+    if (_resetPin >= 0) {
+      pinMode(_resetPin, OUTPUT);
+      digitalWrite(_resetPin, LOW);//Start with radio off
+    }
 
     flags.connectToServerUsingTCP = true;
     flags.endSendWithNewline = true;
@@ -96,8 +98,10 @@ SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte r
     _serialOut = &serialOut;
     _resetPin = resetPin;
 
-    pinMode(_resetPin, OUTPUT);
-    digitalWrite(_resetPin, LOW);//Start with radio off
+    if (_resetPin >= 0) {
+      pinMode(_resetPin, OUTPUT);
+      digitalWrite(_resetPin, LOW);//Start with radio off
+    }
 
     flags.connectToServerUsingTCP = true;
     flags.endSendWithNewline = true;
@@ -139,18 +143,23 @@ bool SerialESP8266wifi::begin() {
     //Do a HW reset
     bool statusOk = false;
     byte i;
-    for(i =0; i<HW_RESET_RETRIES; i++){
-        readCommand(10, NO_IP); //Cleanup
-        digitalWrite(_resetPin, LOW);
-        niceDelay(500);
-        digitalWrite(_resetPin, HIGH); // select the radio
-        // Look for ready string from wifi module
-        statusOk = readCommand(3000, READY) == 1;
-        if(statusOk)
-            break;
+    if (_resetPin >= 0) {
+      for(i =0; i<HW_RESET_RETRIES; i++){
+          readCommand(10, NO_IP); //Cleanup
+          digitalWrite(_resetPin, LOW);
+          niceDelay(500);
+          digitalWrite(_resetPin, HIGH); // select the radio
+          // Look for ready string from wifi module
+          statusOk = readCommand(3000, READY) == 1;
+          if(statusOk)
+              break;
+      }
+      if (!statusOk)
+          return false;
+    } else {
+      // Just clean input.
+      readCommand(3000, OK);
     }
-    if (!statusOk)
-        return false;
 
     //Turn local AP = off
     writeCommand(CWMODE_1, EOL);
