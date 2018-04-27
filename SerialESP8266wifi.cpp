@@ -291,8 +291,8 @@ bool SerialESP8266wifi::connectToServer(){
 void SerialESP8266wifi::disconnectFromServer(){
     flags.connectedToServer = false;
     flags.serverConfigured = false;//disable reconnect
-    writeCommand(CIPCLOSE);
-    readCommand(2000, OK); //fire and forget in this case..
+    writeCommand(CIPCLOSE, EOL);
+    readCommand(2000, CLOSED); //fire and forget in this case..
 }
 
 
