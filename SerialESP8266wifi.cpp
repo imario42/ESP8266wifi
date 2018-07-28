@@ -25,7 +25,7 @@ const char LINK_IS_NOT[] PROGMEM = "link is not";
 const char PROMPT[] PROGMEM = ">";
 const char BUSY[] PROGMEM =  "busy";
 const char LINKED[] PROGMEM = "Linked";
-const char ALREADY[] PROGMEM = "ALREAY";//yes typo in firmware..
+const char ALREADY[] PROGMEM = "ALREADY";
 const char READY[] PROGMEM = "ready";
 const char NO_IP[] PROGMEM = "0.0.0.0";
 
@@ -71,8 +71,10 @@ SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte r
     _serialOut = &serialOut;
     _resetPin = resetPin;
 
-    pinMode(_resetPin, OUTPUT);
-    digitalWrite(_resetPin, LOW);//Start with radio off
+    if (_resetPin >= 0) {
+      pinMode(_resetPin, OUTPUT);
+      digitalWrite(_resetPin, LOW);//Start with radio off
+    }
 
     flags.connectToServerUsingTCP = true;
     flags.endSendWithNewline = true;
@@ -96,8 +98,10 @@ SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte r
     _serialOut = &serialOut;
     _resetPin = resetPin;
 
-    pinMode(_resetPin, OUTPUT);
-    digitalWrite(_resetPin, LOW);//Start with radio off
+    if (_resetPin >= 0) {
+      pinMode(_resetPin, OUTPUT);
+      digitalWrite(_resetPin, LOW);//Start with radio off
+    }
 
     flags.connectToServerUsingTCP = true;
     flags.endSendWithNewline = true;
@@ -139,18 +143,23 @@ bool SerialESP8266wifi::begin() {
     //Do a HW reset
     bool statusOk = false;
     byte i;
-    for(i =0; i<HW_RESET_RETRIES; i++){
-        readCommand(10, NO_IP); //Cleanup
-        digitalWrite(_resetPin, LOW);
-        niceDelay(500);
-        digitalWrite(_resetPin, HIGH); // select the radio
-        // Look for ready string from wifi module
-        statusOk = readCommand(3000, READY) == 1;
-        if(statusOk)
-            break;
+    if (_resetPin >= 0) {
+      for(i =0; i<HW_RESET_RETRIES; i++){
+          readCommand(10, NO_IP); //Cleanup
+          digitalWrite(_resetPin, LOW);
+          niceDelay(500);
+          digitalWrite(_resetPin, HIGH); // select the radio
+          // Look for ready string from wifi module
+          statusOk = readCommand(3000, READY) == 1;
+          if(statusOk)
+              break;
+      }
+      if (!statusOk)
+          return false;
+    } else {
+      // Just clean input.
+      readCommand(3000, OK);
     }
-    if (!statusOk)
-        return false;
 
     //Turn local AP = off
     writeCommand(CWMODE_1, EOL);
@@ -197,8 +206,10 @@ bool SerialESP8266wifi::connectToAP(const char* ssid, const char* password){//TO
 bool SerialESP8266wifi::connectToAP(){
     writeCommand(CWJAP);
     _serialOut -> print(_ssid);
+    if (flags.debug) _dbgSerial-> print(_ssid);
     writeCommand(COMMA_2);
     _serialOut -> print(_password);
+    if (flags.debug) _dbgSerial-> print(_password);
     writeCommand(DOUBLE_QUOTE, EOL);
 
     readCommand(15000, OK, FAIL);
@@ -268,8 +279,10 @@ bool SerialESP8266wifi::connectToServer(){
         writeCommand(UDP);
     writeCommand(COMMA_2);
     _serialOut -> print(_ip);
+    if (flags.debug) _dbgSerial-> print(_ip);
     writeCommand(COMMA_1);
     _serialOut -> println(_port);
+    if (flags.debug) _dbgSerial-> println(_port);
 
     flags.connectedToServer = (readCommand(10000, LINKED, ALREADY) > 0);
 
@@ -282,8 +295,8 @@ bool SerialESP8266wifi::connectToServer(){
 void SerialESP8266wifi::disconnectFromServer(){
     flags.connectedToServer = false;
     flags.serverConfigured = false;//disable reconnect
-    writeCommand(CIPCLOSE);
-    readCommand(2000, OK); //fire and forget in this case..
+    writeCommand(CIPCLOSE, EOL);
+    readCommand(2000, CLOSED); //fire and forget in this case..
 }
 
 
@@ -323,6 +336,7 @@ bool SerialESP8266wifi::startLocalServer(){
     // Start local server
     writeCommand(CIPSERVERSTART);
     _serialOut -> println(_localServerPort);
+    if (flags.debug) _dbgSerial-> println(_localServerPort);
 
     flags.localServerRunning = (readCommand(2000, OK, NO_CHANGE) > 0);
     return flags.localServerRunning;
@@ -337,10 +351,13 @@ bool SerialESP8266wifi::startLocalAp(){
     // Configure the soft ap
     writeCommand(CWSAP);
     _serialOut -> print(_localAPSSID);
+    if (flags.debug) _dbgSerial-> print(_localAPSSID);
     writeCommand(COMMA_2);
     _serialOut -> print(_localAPPassword);
+    if (flags.debug) _dbgSerial-> print(_localAPPassword);
     writeCommand(COMMA_1);
     _serialOut -> print(_localAPChannel);
+    if (flags.debug) _dbgSerial-> print(_localAPChannel);
     writeCommand(THREE_COMMA, EOL);
 
     flags.localApRunning = (readCommand(5000, OK, ERROR) == 1);
@@ -414,14 +431,19 @@ bool SerialESP8266wifi::send(char channel, const char * message, bool sendNow){
 
     writeCommand(CIPSEND);
     _serialOut -> print(channel);
+    if (flags.debug) _dbgSerial-> print(channel);
     writeCommand(COMMA);
     _serialOut -> println(length);
+    if (flags.debug) _dbgSerial-> println(length);
     byte prompt = readCommand(1000, PROMPT, LINK_IS_NOT);
     if (prompt != 2) {
-        if(flags.endSendWithNewline)
-            _serialOut -> println(msgOut);
-        else
-            _serialOut -> print(msgOut);
+        if(flags.endSendWithNewline) {
+          _serialOut -> println(msgOut);
+          if (flags.debug) _dbgSerial-> println(msgOut);
+        } else {
+          _serialOut -> print(msgOut);
+          if (flags.debug) _dbgSerial-> print(msgOut);
+        }
         byte sendStatus = readCommand(5000, SEND_OK, BUSY);
         if (sendStatus == 1) {
             msgOut[0] = '\0';
@@ -602,11 +624,14 @@ void SerialESP8266wifi::writeCommand(const char* text1 = NULL, const char* text2
     char buf[16] = {'\0'};
     strcpy_P(buf, (char *) text1);
     _serialOut->print(buf);
+    if (flags.debug) _dbgSerial->print(buf);
     if (text2 == EOL) {
         _serialOut->println();
+        if (flags.debug) _dbgSerial->println();
     } else if (text2 != NULL) {
         strcpy_P(buf, (char *) text2);
         _serialOut->print(buf);
+        if (flags.debug) _dbgSerial->print(buf);
     }
 }
 
