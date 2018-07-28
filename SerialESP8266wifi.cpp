@@ -692,3 +692,59 @@ char SerialESP8266wifi::readChar() {
         sqrt(12345);//delayMicroseconds(50); // don't know why
     return c;
 }
+
+// Additional methods for library method compatibility to ESP8266Wifi
+
+SerialESP8266wifi::SerialESP8266wifi() {
+	// attention: if you use this constructor, make sure to also call
+	// one of the other constructors. It only exists for platform compatibility.
+}
+
+bool SerialESP8266wifi::open(const char* ip, int& port) {
+	char buffer[7];
+    return connectToServer(ip, itoa(port, buffer, 10));
+}
+
+void SerialESP8266wifi::close(){
+	disconnectFromServer();
+}
+
+bool SerialESP8266wifi::isConnected(){
+	return isConnectedToServer();
+}
+	
+void SerialESP8266wifi::println(char* data) {
+	_serialOut->println(data);
+}
+
+void SerialESP8266wifi::println(String& data) {
+	_serialOut->println(data);
+}
+
+void SerialESP8266wifi::println() {
+	_serialOut->println();
+}
+
+void SerialESP8266wifi::print(char* data) {
+	_serialOut->print(data);
+}
+
+void SerialESP8266wifi::print(String& data) {
+	_serialOut->print(data);
+}
+
+void SerialESP8266wifi::print(char data) {
+	_serialOut->print(data);
+}
+
+int SerialESP8266wifi::available() {
+	return _serialIn->available();
+}
+
+void SerialESP8266wifi::stop() {
+	// no idea
+}
+
+char SerialESP8266wifi::read() {
+	return readChar();
+}
