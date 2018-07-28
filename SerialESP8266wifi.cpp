@@ -60,6 +60,7 @@ const char COMMA[] PROGMEM = ",";
 const char COMMA_1[] PROGMEM = "\",";
 const char COMMA_2[] PROGMEM = "\",\"";
 const char THREE_COMMA[] PROGMEM = ",3";
+const char ZERO_COMMA[] PROGMEM = ",0";
 const char DOUBLE_QUOTE[] PROGMEM = "\"";
 const char EOL[] PROGMEM = "\n";
 
@@ -358,7 +359,11 @@ bool SerialESP8266wifi::startLocalAp(){
     writeCommand(COMMA_1);
     _serialOut -> print(_localAPChannel);
     if (flags.debug) _dbgSerial-> print(_localAPChannel);
-    writeCommand(THREE_COMMA, EOL);
+    if (_localAPPassword == NULL || strlen(_localAPPassword) > 0) {
+        writeCommand(THREE_COMMA, EOL);
+    } else {
+        writeCommand(ZERO_COMMA, EOL);
+    }
 
     flags.localApRunning = (readCommand(5000, OK, ERROR) == 1);
     return flags.localApRunning;
@@ -710,11 +715,16 @@ byte SerialESP8266wifi::readBuffer(char* buf, byte count, char delim) {
 
 // Reads a single char from serial input (with debug printout if configured)
 char SerialESP8266wifi::readChar() {
-    char c = _serialIn->read();
+    char c = 0;
+    do
+    {
+        c = _serialIn->read();
+    }
+    while (c == 0 && _serialIn->available());
+
     if (flags.debug)
         _dbgSerial->print(c);
-    else
-        sqrt(12345);//delayMicroseconds(50); // don't know why
+
     return c;
 }
 
