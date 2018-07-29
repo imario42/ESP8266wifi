@@ -31,6 +31,7 @@ const char NO_IP[] PROGMEM = "0.0.0.0";
 
 const char CIPSEND[] PROGMEM = "AT+CIPSEND=";
 const char CIPSERVERSTART[] PROGMEM = "AT+CIPSERVER=1,";
+const char CIPSERVERMAXCONN[] PROGMEM = "AT+CIPSERVERMAXCONN=1";
 const char CIPSERVERSTOP[] PROGMEM = "AT+CIPSERVER=0";
 const char CIPSTART[] PROGMEM = "AT+CIPSTART=4,\"";
 const char CIPCLOSE[] PROGMEM = "AT+CIPCLOSE=4";
@@ -246,7 +247,7 @@ char* SerialESP8266wifi::getIP(){
     byte code = readCommand(1000, STAIP, ERROR);
     if (code == 1) {
         // found staip
-        readBuffer(msgIn, _bufferSize - 1, '"');
+        readBuffer(msgIn, _bufferSize, _bufferSize - 1, '"');
         readCommand(100, OK, ERROR);
         return msgIn;
     }
@@ -260,7 +261,7 @@ char* SerialESP8266wifi::getMAC(){
     byte code = readCommand(1000, STAMAC, ERROR);
     if (code == 1) {
         // found stamac
-        readBuffer(msgIn, _bufferSize - 1, '"');
+        readBuffer(msgIn, _bufferSize, _bufferSize - 1, '"');
         readCommand(100, OK, ERROR);
         return msgIn;
     }
@@ -351,6 +352,13 @@ bool SerialESP8266wifi::startLocalServer(const char* port) {
 
 bool SerialESP8266wifi::startLocalServer(){
     // Start local server
+
+    // only allow a single connection as multiple connections are a pain int the * to handle using the UART connection.
+    // This might be alot of work to do to handle the data correctly
+    writeCommand(CIPSERVERMAXCONN, EOL);
+    if (!readCommand(2000, OK, NO_CHANGE))
+        return false;
+
     writeCommand(CIPSERVERSTART);
     _serialOut -> println(_localServerPort);
     if (flags.debug) _dbgSerial-> println(_localServerPort);
@@ -591,10 +599,10 @@ WifiMessage SerialESP8266wifi::listenForIncomingMessage(int timeout){
         if (channel == SERVER)
             flags.connectedToServer = true;
         readChar(); // removing comma
-        readBuffer(&buf[0], sizeof(buf) - 1, ':'); // read char count
+        readBuffer(&buf[0], sizeof(buf), sizeof(buf) - 1, ':'); // read char count
         // delimiter already removed readChar(); // removing ':' delim
         byte length = atoi(buf);
-        readBuffer(msgIn, min(length, _bufferSize - 1));
+        readBuffer(msgIn, _bufferSize, length);
         msg.hasData = true;
         msg.channel = channel;
         msg.message = msgIn;
@@ -628,11 +636,11 @@ WifiMessage SerialESP8266wifi::getIncomingMessage(void) {
         if (channel == SERVER)
             flags.connectedToServer = true;
         readChar(); // removing comma
-        readBuffer(&buf[0], sizeof(buf) - 1, ':'); // read char count
+        readBuffer(&buf[0], sizeof(buf), sizeof(buf) - 1, ':'); // read char count
         // delimiter already removed readChar(); // removing ':' delim
         byte length = atoi(buf);
 
-        readBuffer(msgIn, min(length, _bufferSize - 1));
+        readBuffer(msgIn, _bufferSize, length);
         msg.hasData = true;
         msg.channel = channel;
         msg.message = msgIn;
@@ -716,17 +724,33 @@ byte SerialESP8266wifi::readCommand(int timeout, const char* text1, const char* 
 }*/
 
 // Reads count chars to a buffer, or until delim char is found
-byte SerialESP8266wifi::readBuffer(char* buf, int count, char delim) {
+byte SerialESP8266wifi::readBuffer(char* buf, int bufSize, int count, char delim) {
     byte pos = 0;
     char c;
 
-    while (pos < count) {
+    int bytesToRead = min(bufSize - 1, count);
+    int bytesToTrash = delim != '\n' ? (count - bytesToRead) : 0;
+
+    if (bytesToTrash > 0 && flags.debug)
+    {
+        _dbgSerial->print("Bytes to trash=");
+        _dbgSerial->println(bytesToTrash);
+    }
+
+    while (pos < bytesToRead) {
         c = readChar();
         if (c == delim) {
             break;
 	}
         buf[pos++] = c;
     }
+
+    for (int i = 0; i<bytesToTrash; i++)
+    {
+        // drain serial line
+        readChar();
+    }
+
     buf[pos] = '\0';
     return pos;
 }
@@ -749,7 +773,6 @@ char SerialESP8266wifi::readChar() {
     if (flags.debug)
     {
         _dbgSerial->print(c);
-//        _dbgSerial->print(c, HEX);
     }
 
     return c;

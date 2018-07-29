@@ -188,8 +188,8 @@ private:
     
     bool startLocalAp();
     bool startLocalServer();
-    char _localAPSSID[16];
-    char _localAPPassword[16]; // may need increasing
+    char _localAPSSID[31];
+    char _localAPPassword[64];
     char _localAPChannel[3];
     char _localServerPort[6];
     WifiConnection _connections[MAX_CONNECTIONS];
@@ -205,7 +205,7 @@ private:
     void writeCommand(const char* text1, const char* text2 = NULL);
     byte readCommand(int timeout, const char* text1 = NULL, const char* text2 = NULL);
     //byte readCommand(const char* text1, const char* text2);
-    byte readBuffer(char* buf, int count, char delim = '\0');
+    byte readBuffer(char* buf, int bufSize, int count, char delim = '\0');
     char readChar();
     Stream* _dbgSerial;
 };
