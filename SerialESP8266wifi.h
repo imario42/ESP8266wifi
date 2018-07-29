@@ -32,8 +32,6 @@
 #define SERVER '4'
 #define MAX_CONNECTIONS 3
 
-#define MSG_BUFFER_MAX 128
-
 struct WifiMessage{
 public:
     bool hasData:1;
@@ -70,14 +68,19 @@ public:
     /*
      * Will pull resetPin low then high to reset esp8266, connect this pin to CHPD pin
      */
-    SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin);
+    SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin, int bufferSize);
     
     
     /*
      * Will pull resetPin low then high to reset esp8266, connect this pin to CHPD pin
      */
-    SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin, Stream &dbgSerial);
+    SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin, int bufferSize, Stream &dbgSerial);
     
+    /**
+     * Destructor to free resources
+     */
+    ~SerialESP8266wifi();
+
     /*
      * Will do hw reset and set inital configuration, will try this HW_RESET_RETRIES times.
      */
@@ -195,14 +198,14 @@ private:
     
     byte serverRetries;
     
-    
-    char msgOut[MSG_BUFFER_MAX];//buffer for send method
-    char msgIn[MSG_BUFFER_MAX]; //buffer for listen method = limit of incoming message..
+    int _bufferSize;
+    char* msgOut;//buffer for send method
+    char* msgIn; //buffer for listen method = limit of incoming message..
 
     void writeCommand(const char* text1, const char* text2 = NULL);
     byte readCommand(int timeout, const char* text1 = NULL, const char* text2 = NULL);
     //byte readCommand(const char* text1, const char* text2);
-    byte readBuffer(char* buf, byte count, char delim = '\0');
+    byte readBuffer(char* buf, int count, char delim = '\0');
     char readChar();
     Stream* _dbgSerial;
 };

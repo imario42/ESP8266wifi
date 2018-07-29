@@ -67,10 +67,14 @@ const char EOL[] PROGMEM = "\n";
 const char STAIP[] PROGMEM = "STAIP,\"";
 const char STAMAC[] PROGMEM = "STAMAC,\"";
 
-SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin) {
+SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin, int bufferSize) {
     _serialIn = &serialIn;
     _serialOut = &serialOut;
     _resetPin = resetPin;
+    _bufferSize = bufferSize;
+
+    msgIn = new char[bufferSize];
+    msgOut = new char[bufferSize];
 
     if (_resetPin >= 0) {
       pinMode(_resetPin, OUTPUT);
@@ -94,10 +98,14 @@ SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte r
     }
 }
 
-SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin, Stream &dbgSerial) {
+SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte resetPin, int bufferSize, Stream &dbgSerial) {
     _serialIn = &serialIn;
     _serialOut = &serialOut;
     _resetPin = resetPin;
+    _bufferSize = bufferSize;
+
+    msgIn = new char[bufferSize];
+    msgOut = new char[bufferSize];
 
     if (_resetPin >= 0) {
       pinMode(_resetPin, OUTPUT);
@@ -122,11 +130,19 @@ SerialESP8266wifi::SerialESP8266wifi(Stream &serialIn, Stream &serialOut, byte r
     }
 }
 
+SerialESP8266wifi::~SerialESP8266wifi() {
+	delete [] msgIn;
+	delete [] msgOut;
+}
+
 void niceDelay(int duration){
+    delay(duration);
+/*
     unsigned long startMillis = millis();
     while(millis() - startMillis < duration){
         sqrt(4700);
     }
+*/
 }
 
 void SerialESP8266wifi::endSendWithNewline(bool endSendWithNewline){
@@ -146,7 +162,7 @@ bool SerialESP8266wifi::begin() {
     byte i;
     if (_resetPin >= 0) {
       for(i =0; i<HW_RESET_RETRIES; i++){
-          readCommand(10, NO_IP); //Cleanup
+          readCommand(100, NO_IP); //Cleanup
           digitalWrite(_resetPin, LOW);
           niceDelay(500);
           digitalWrite(_resetPin, HIGH); // select the radio
@@ -220,7 +236,7 @@ bool SerialESP8266wifi::connectToAP(){
 bool SerialESP8266wifi::isConnectedToAP(){
     writeCommand(CIFSR, EOL);
     byte code = readCommand(350, NO_IP, ERROR);
-    readCommand(10, OK); //cleanup
+    readCommand(100, OK); //cleanup
     return (code == 0);
 }
 
@@ -230,12 +246,12 @@ char* SerialESP8266wifi::getIP(){
     byte code = readCommand(1000, STAIP, ERROR);
     if (code == 1) {
         // found staip
-        readBuffer(&msgIn[0], sizeof(msgIn) - 1, '"');
-        readCommand(10, OK, ERROR);
-        return &msgIn[0];
+        readBuffer(msgIn, _bufferSize - 1, '"');
+        readCommand(100, OK, ERROR);
+        return msgIn;
     }
     readCommand(1000, OK, ERROR);
-    return &msgIn[0];
+    return msgIn;
 }
 
 char* SerialESP8266wifi::getMAC(){
@@ -244,12 +260,12 @@ char* SerialESP8266wifi::getMAC(){
     byte code = readCommand(1000, STAMAC, ERROR);
     if (code == 1) {
         // found stamac
-        readBuffer(&msgIn[0], sizeof(msgIn) - 1, '"');
-        readCommand(10, OK, ERROR);
-        return &msgIn[0];
+        readBuffer(msgIn, _bufferSize - 1, '"');
+        readCommand(100, OK, ERROR);
+        return msgIn;
     }
     readCommand(1000, OK, ERROR);
-    return &msgIn[0];
+    return msgIn;
 }
 
 void SerialESP8266wifi::setTransportToUDP(){
@@ -425,7 +441,7 @@ bool SerialESP8266wifi::send(char channel, String& message, bool sendNow) {
 
 bool SerialESP8266wifi::send(char channel, const char * message, bool sendNow){
     watchdog();
-    byte avail = sizeof(msgOut) - strlen(msgOut) - 1;
+    byte avail = _bufferSize - strlen(msgOut) - 1;
     strncat(msgOut, message, avail);
     if (!sendNow)
         return true;
@@ -576,13 +592,13 @@ WifiMessage SerialESP8266wifi::listenForIncomingMessage(int timeout){
             flags.connectedToServer = true;
         readChar(); // removing comma
         readBuffer(&buf[0], sizeof(buf) - 1, ':'); // read char count
-        readChar(); // removing ':' delim
+        // delimiter already removed readChar(); // removing ':' delim
         byte length = atoi(buf);
-        readBuffer(&msgIn[0], min(length, sizeof(msgIn) - 1));
+        readBuffer(msgIn, min(length, _bufferSize - 1));
         msg.hasData = true;
         msg.channel = channel;
         msg.message = msgIn;
-        readCommand(10, OK); // cleanup after rx
+        readCommand(100, OK); // cleanup after rx
     }
     return msg;
 }
@@ -599,7 +615,7 @@ WifiMessage SerialESP8266wifi::getIncomingMessage(void) {
     msg.message = msgIn;
 
     // See if a message has come in (block 1s otherwise misses?)
-    byte msgOrRestart = readCommand(10, IPD, READY);
+    byte msgOrRestart = readCommand(100, IPD, READY);
 
     //Detected a esp8266 restart
     if (msgOrRestart == 2){
@@ -613,13 +629,14 @@ WifiMessage SerialESP8266wifi::getIncomingMessage(void) {
             flags.connectedToServer = true;
         readChar(); // removing comma
         readBuffer(&buf[0], sizeof(buf) - 1, ':'); // read char count
-        readChar(); // removing ':' delim
+        // delimiter already removed readChar(); // removing ':' delim
         byte length = atoi(buf);
-        readBuffer(&msgIn[0], min(length, sizeof(msgIn) - 1));
+
+        readBuffer(msgIn, min(length, _bufferSize - 1));
         msg.hasData = true;
         msg.channel = channel;
         msg.message = msgIn;
-        readCommand(10, OK); // cleanup after rx
+        readCommand(100, OK); // cleanup after rx
     }
     return msg;
 }
@@ -667,7 +684,6 @@ byte SerialESP8266wifi::readCommand(int timeout, const char* text1, const char* 
             if (len2 > 0 && pos2 == len2)
                 return 2;
         }
-        niceDelay(10);
     } while (millis() < stop);
     return 0;
 }
@@ -700,13 +716,15 @@ byte SerialESP8266wifi::readCommand(int timeout, const char* text1, const char* 
 }*/
 
 // Reads count chars to a buffer, or until delim char is found
-byte SerialESP8266wifi::readBuffer(char* buf, byte count, char delim) {
+byte SerialESP8266wifi::readBuffer(char* buf, int count, char delim) {
     byte pos = 0;
     char c;
-    while (_serialIn->available() && pos < count) {
+
+    while (pos < count) {
         c = readChar();
-        if (c == delim)
+        if (c == delim) {
             break;
+	}
         buf[pos++] = c;
     }
     buf[pos] = '\0';
@@ -715,15 +733,24 @@ byte SerialESP8266wifi::readBuffer(char* buf, byte count, char delim) {
 
 // Reads a single char from serial input (with debug printout if configured)
 char SerialESP8266wifi::readChar() {
-    char c = 0;
+    char c = -1;
+
     do
     {
+        if (!_serialIn->available())
+        {
+            delay(10);
+        }
+
         c = _serialIn->read();
     }
-    while (c == 0 && _serialIn->available());
+    while (c < 0);
 
     if (flags.debug)
+    {
         _dbgSerial->print(c);
+//        _dbgSerial->print(c, HEX);
+    }
 
     return c;
 }
